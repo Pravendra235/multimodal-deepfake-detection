@@ -22,6 +22,7 @@ from PIL import Image as pImage
 import time
 from django.conf import settings
 from .forms import VideoUploadForm
+import ffmpeg
 
 index_template_name = 'index.html'
 predict_template_name = 'predict.html'
@@ -206,12 +207,23 @@ def get_accurate_model(sequence_length):
 
 ALLOWED_VIDEO_EXTENSIONS = set(['mp4','gif','webm','avi','3gp','wmv','flv','mkv'])
 
+def extract_audio(video_path, output_audio_path):
+    """Extracts audio from a video file and saves it as a WAV file."""
+    try:
+        ffmpeg.input(rf"{video_path}").output(rf"{output_audio_path}", acodec='pcm_s16le', ar=16000).run(quiet=True, overwrite_output=True)
+        print("****haiyaaann&*****:", output_audio_path)
+        return output_audio_path
+    except Exception as e:
+        print(f"Audio extraction failed: {e}")
+        return None
+
 def allowed_video_file(filename):
     #print("filename" ,filename.rsplit('.',1)[1].lower())
     if (filename.rsplit('.',1)[1].lower() in ALLOWED_VIDEO_EXTENSIONS):
         return True
     else: 
         return False
+
 def index(request):
     if request.method == 'GET':
         video_upload_form = VideoUploadForm()
@@ -243,6 +255,8 @@ def index(request):
                 return render(request, index_template_name, {"form": video_upload_form})
             
             saved_video_file = 'uploaded_file_'+str(int(time.time()))+"."+video_file_ext
+            
+            print("saved video file", saved_video_file)
             if settings.DEBUG:
                 with open(os.path.join(settings.PROJECT_DIR, 'uploaded_videos', saved_video_file), 'wb') as vFile:
                     shutil.copyfileobj(video_file, vFile)
@@ -252,9 +266,19 @@ def index(request):
                     shutil.copyfileobj(video_file, vFile)
                 request.session['file_name'] = os.path.join(settings.PROJECT_DIR, 'uploaded_videos','app','uploaded_videos', saved_video_file)
             request.session['sequence_length'] = sequence_length
+            
+            print("file name", request.session['file_name'])
+
+            audio_save_path = os.path.join(settings.PROJECT_DIR, 'uploaded_audios', saved_video_file.rsplit('.', 1)[0] + ".wav")
+            print("*********************************upar:", request.session['file_name'])
+            extract_audio(request.session['file_name'], audio_save_path)
+            print("*********************************neeche:", audio_save_path)
+            request.session['audio_file_name'] = audio_save_path
+            
             return redirect('ml_app:predict')
         else:
             return render(request, index_template_name, {"form": video_upload_form})
+
 
 def predict_page(request):
     if request.method == "GET":
